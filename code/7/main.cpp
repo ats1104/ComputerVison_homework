@@ -21,354 +21,313 @@ using namespace cv;
 #pragma comment(lib, "opencv_world440d.lib") 
 #else
 #endif
-
-struct obj_t {
-	int     idx;
-	Point2f pt;
-};
-
-// テンプレートの作成
-void gen_template(vector<Mat> & Ts, char *name) {
-
-	for (int i = 0; i < strlen(name); i++) {
-		Mat T = Mat(32, 32, CV_8U);
-		T = 0;
-		char buf[32];
-		sprintf(buf, "%c", name[i]);
-		putText(T, buf, Point(8, 24), FONT_HERSHEY_SIMPLEX, 0.7, 255, 2.0, LINE_AA);
-        imwrite("template"+ to_string(i) +".png", T);
-		Ts.push_back(T);
-	}
-}
-
-void gen_input_subpix_image(Mat & I, vector<Mat>& Ts, vector<obj_t>& objs){
-
-
-
-
-}
-
-void gen_input_image(Mat & I, vector<Mat>& Ts, vector<obj_t>& objs) {
-
-	int w, h;
-	w = h = 512;
-	I = Mat(h, w, CV_8U);
-	I = 0;
-	// paste random object & position
-	for (int i = 0; i < 20; i++) {
-		obj_t obj;
-		obj.idx = rand()%Ts.size();
-		obj.pt.x = (w- Ts[obj.idx].cols) * (rand() % 10000) / 10000.0;
-		obj.pt.y = 32 + (h- Ts[obj.idx].rows - 32) * (rand() % 10000) / 10000.0;
-		objs.push_back(obj);
-		Mat A = (cv::Mat_<double>(2, 3) << 1, 0, obj.pt.x, 0, 1, obj.pt.y);
-		Mat tmp;
-		cv::warpAffine(Ts[obj.idx], tmp, A, I.size());
-		I = I | tmp;
-	}
-}
-//ZNCC
-void detect(Mat& I, Mat & RGB, vector<Mat>& Ts, vector<obj_t>& res) {
-
-
-
-	for (int i = 0; i < Ts.size(); i++) {
-
-		Mat sim;
-
-		matchTemplate(I, Ts[i], sim, cv::TM_CCOEFF_NORMED);
-
-		for (int y = 1; y < sim.rows -1; y++) {
-			for (int x = 1; x < sim.cols-1; x++) {
-                // 注目画素
-				float p0 = sim.at<float>(y, x);
-                
-                
-				// detect by threshold
-				if (p0 > 0.8) {
-					// add result
-                    //注目画像が閾値を超えていた場合．
-					obj_t obj;
-					obj.pt.x = x;
-					obj.pt.y = y;
-					obj.idx = i;
-					res.push_back(obj);
-					// printf("detect %d (%d, %d)\n", i, x, y);
-
-					// Level 1
-					// draw rectangle & ID
-                    String text = "ID=" + to_string(i); 
-                    putText(RGB, text, Point(obj.pt.x, obj.pt.y), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-                    rectangle(RGB, Rect(Point(obj.pt.x, obj.pt.y), Point(obj.pt.x, obj.pt.y) + Point(Ts[i].cols, Ts[i].rows)), CV_RGB(255, 0, 0), 1.0, LINE_AA);
-                    
-				}
-			}
+// 画像の読み込み．
+void readImages(vector<Mat>& images) {
+	for (int i = 0; i < 100; i++) {
+		char file[1024];
+		sprintf(file, "./faces/%06d.jpg", i + 1);
+		// load as gray image
+		Mat img = imread(file, 0);
+		if (img.data)
+		{
+			img.convertTo(img, CV_32F, 1 / 255.0);
+			images.push_back(img);
+			// flip and add
+			Mat imgFlip;
+			flip(img, imgFlip, 1);
+			images.push_back(imgFlip);
 		}
-
 	}
 }
-
-//ZNCC
-void peek_detect(Mat& I, Mat & RGB, vector<Mat>& Ts, vector<obj_t>& res) {
-
-
-
-	for (int i = 0; i < Ts.size(); i++) {
-
-		Mat sim;
-
-		matchTemplate(I, Ts[i], sim, cv::TM_CCOEFF_NORMED);
-
-		for (int y = 1; y < sim.rows -1; y++) {
-			for (int x = 1; x < sim.cols-1; x++) {
-                // 注目画素
-				float p5 = sim.at<float>(y, x);
-                // 8近傍
-				float p1 = sim.at<float>(y-1, x-1);
-				float p2 = sim.at<float>(y-1, x);
-				float p3 = sim.at<float>(y-1, x+1);
-				float p4 = sim.at<float>(y, x-1);
-                float p6 = sim.at<float>(y, x+1);
-                float p7 = sim.at<float>(y+1, x-1);
-                float p8 = sim.at<float>(y+1, x);
-                float p9 = sim.at<float>(y+1, x+1);
-
-                float max_value = p5;
-                int max_index = 0;
-
-
-                float values[] = {p1, p2, p3, p4, p6, p7, p8, p9};
-
-                for (int j = 0; j < 8; j++){
-                    if (values[j] > max_value){
-                        max_value = values[j];
-                        max_index = j + 1;
-                    }
-                }
-                
-				// detect by threshold
-				if (max_index == 0 && p5 > 0.8) {
-                    // printf("%f\n", p5);
-					// add result
-                    //注目画像が閾値を超えていた場合．
-					obj_t obj;
-					obj.pt.x = x;
-					obj.pt.y = y;
-					obj.idx = i;
-					res.push_back(obj);
-     
-					printf("detect %d (%d, %d)\n", i, obj.pt.x, obj.pt.y);
-
-					// Level 1
-					// draw rectangle & ID
-                    String text = "ID=" + to_string(i); 
-                    putText(RGB, text, Point(obj.pt.x, obj.pt.y), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-                    rectangle(RGB, Rect(Point(obj.pt.x, obj.pt.y), Point(obj.pt.x, obj.pt.y) + Point(Ts[i].cols, Ts[i].rows)), CV_RGB(255, 0, 0), 1.0, LINE_AA);
-                    
-				}
-			}
-		}
-
+// Create data matrix from a vector of images
+Mat createDataMatrix(const vector<Mat>& images)
+{
+	// data(N x pix)
+	Mat data(images.size(), images[0].rows * images[0].cols, CV_32F);
+	for (int i = 0; i < images.size(); i++)
+	{
+		Mat image = images[i].reshape(1, 1);
+		image.copyTo(data.row(i));
 	}
+	return data;
 }
-void eval(vector<obj_t>& objs, vector<obj_t>& res, int& obj_num, float& prec, float& total_d, int& correct_count){
+// 平均顔の計算．
+void compute_eigenface(vector<Mat> & images, Mat& averageFace, vector<Mat>& eigenFaces) {
+	Size sz = images[0].size();
 
-    
-    obj_num = objs.size();
-    int res_num = res.size();
-    int detect_count = 0;
-    total_d = 0;
-    correct_count = 0;
-   for (size_t i = 0; i < obj_num; i++) {
-        obj_t obj = objs[i];
-        bool detected  = false;
-        int obj_count = 0;
-        float d = 0;
+	Mat data = createDataMatrix(images);
+	int N = images.size();
 
+	// compute PCA
+	
+	PCA pca(data, Mat(), PCA::DATA_AS_ROW, N);
 
-        for (int j = 0; j < res_num; j++){
-            obj_t re = res[j];
-            // idxにはそれぞれの文字を示すLabelが入っている．
-            if (obj.idx == re.idx){
-            float x_d = std::abs(obj.pt.x - re.pt.x);
-            float y_d = std::abs(obj.pt.y - re.pt.y);
-            d = std::sqrt(x_d*x_d+y_d*y_d);
-            if (d <= 3.0){
-                detected = true;
-                obj_count += 1;
-                // break;
-            }
-            if (detected){
-            detect_count += 1;
-            total_d += d;
-            detected = false;
-        }
-            }
+	// average face
+	averageFace = pca.mean.reshape(1, sz.height);
+	// 保存用
+	Mat tmp_averageFace;
+	averageFace.copyTo(tmp_averageFace);
 
-        }
-        if (obj_count > 0){
-            correct_count += 1;
-        }
-        
+	// 平均顔の保存．
+	// normalize(tmp_averageFace, tmp_averageFace, 0, 255, NORM_MINMAX);
+	tmp_averageFace.convertTo(tmp_averageFace, CV_8U, 255);
+	imwrite("average_face.png", tmp_averageFace);
+
+	// Find eigen vectors.
+	Mat eigenVectors = pca.eigenvectors;
+
+	// Reshape Eigenvectors to obtain EigenFaces
+	for (int i = 0; i < N; i++)
+	{
+		Mat eigenFace = eigenVectors.row(i).reshape(1, sz.height);
+		eigenFaces.push_back(eigenFace);
+	}
+
+	for (int i = 0; i < eigenFaces.size(); ++i) {
+
+		// Convert eigen face to CV_8U
+		Mat eigenface;
+		eigenFaces[i].copyTo(eigenface);
+		normalize(eigenface, eigenface, 0, 255, NORM_MINMAX);
+    	eigenface.convertTo(eigenface, CV_8U);
+        string filename = "eigenface_" + to_string(i) + ".png";
+        imwrite(filename, eigenface);
     }
-    
-    if (detect_count != 0){
-        prec = 100*correct_count / obj_num;
-        total_d /= detect_count;
-    }
- 
+
+
+
+    // waitKey(0);
 
 }
 
 
-void sub_pix_2D(float p1, float p2, float p3, float p4, float p5, float p6, float p7, float p8, float p9, float& sub_x, float& sub_y){
-
-    float b1, b2, b3, b4, b5, b6;
-    float a, b, c, d, e, f;
-    
-    b1 = p1 + p3 + p4 + p6 + p7 + p9;
-    b2 = p1 - p3 - p7 + p9;
-    b3 = p1 + p2 + p3 + p7 + p8 + p9;
-    b4 = -p1 + p3 - p4 + p6 - p7 + p9;
-    b5 = -p1 -p2 -p3 + p7 + p8 + p9;
-    b6 = p1 + p2 + p3 + p4 + p5 +p6 + p7 + p8 + p9;
-
-    a = (3*b1 - 2*b6)/6.0;
-    b = b2 / 4.0;
-    c = (3*b3-2*b6) / 6.0;
-    d = b4 / 6.0;
-    e = b5 / 6.0;
-    f = (-3*b1-3*b3-5*b6) / 9.0;
-
-    sub_x = (2*c*d-b*e)/(b*b-4*a*c);
-    sub_y = (2*a*e-b*d)/(b*b-4*a*c);
-
-    
-    // peek = a*sub_x*sub_x + b*sub_x*sub_y + c*sub_y*sub_y + d*sub_x + e*sub_y + f;
-    
-}
-//ZNCC
-void detect_subpix(Mat& I, Mat & RGB, vector<Mat>& Ts, vector<obj_t>& res) {
 
 
+// データセットからランダムに選択した画像を貼り付ける
+void gen_face(vector<Mat> images, Mat & img, vector<int> & labels, int seed) {
 
-	for (int i = 0; i < Ts.size(); i++) {
-
-		Mat sim;
-
-		matchTemplate(I, Ts[i], sim, cv::TM_CCOEFF_NORMED);
-
-		for (int y = 1; y < sim.rows -1; y++) {
-			for (int x = 1; x < sim.cols-1; x++) {
-                // 注目画素
-				float p5 = sim.at<float>(y, x);
-                // 8近傍
-				float p1 = sim.at<float>(y-1, x-1);
-				float p2 = sim.at<float>(y-1, x);
-				float p3 = sim.at<float>(y-1, x+1);
-				float p4 = sim.at<float>(y, x-1);
-                float p6 = sim.at<float>(y, x+1);
-                float p7 = sim.at<float>(y+1, x-1);
-                float p8 = sim.at<float>(y+1, x);
-                float p9 = sim.at<float>(y+1, x+1);
-
-                
-
-                float max_value = p5;
-                int max_index = 0;
-
-
-                float values[] = {p1, p2, p3, p4, p6, p7, p8, p9};
-
-                for (int j = 0; j < 8; j++){
-                    if (values[j] > max_value){
-                        max_value = values[j];
-                        max_index = j + 1;
-                    }
-                }
-
-				// detect by threshold
-				if (p5 > 0.8 && max_index == 0) {
-
-					// add result
-                    //注目画像が閾値を超えていた場合．
-					obj_t obj;
-                    //サブピクセル補正．
-                    float sub_x, sub_y;
-                    sub_pix_2D(p1, p2, p3, p4, p5, p6, p7, p8, p9, sub_x, sub_y);
-					obj.pt.x = sub_x + x;
-					obj.pt.y = sub_y + y;
-					obj.idx = i;
-					res.push_back(obj);
-                    printf("detect %d (%f, %f)\n", i, obj.pt.x, obj.pt.y);
+	srand(seed);
+	img = Mat(800, 1200, CV_32F);
+	img = 1;
+	int w = images[0].cols, h = images[0].rows;
 
 	
-                    String text = "ID=" + to_string(i); 
-                    putText(RGB, text, Point(obj.pt.x, obj.pt.y), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-                    rectangle(RGB, Rect(Point(obj.pt.x, obj.pt.y), Point(obj.pt.x, obj.pt.y) + Point(Ts[i].cols, Ts[i].rows)), CV_RGB(255, 0, 0), 1.0, LINE_AA);
-                    
-				}
-			}
-		}
 
+	for (int y = 50; y <= 700; y += 250) {
+		for (int x = 50; x <= 1000; x += 200) {
+			int id = rand() % images.size();
+			Mat roi(img, Rect(x, y, w, h));
+			images[id].copyTo(roi);
+			labels.push_back(id);
+
+		}
 	}
+	img.convertTo(img, CV_8U, 255);
+	imshow("img", img);
+	// waitKey(0);
 }
+
+
+// sort rect according to position (left, top) : TV scan
+bool fcomp(const Rect& a, const Rect& b) { return (a.y + a.x*0.1) < (b.y + b.x * 0.1); }
+
+int d_labels_index(int face_x, int face_y, vector<int> labels){
+
+	int index = 0;
+	for (int y = 50; y <= 700; y += 250) {
+		for (int x = 50; x <= 1000; x += 200) {
+
+			if(face_y >= y && face_y <= y+250 && face_x >= x && face_x <= x+200){
+				return index;
+			}
+
+		index++;
+
+		}
+	}
+
+	return index;
+
+
+}
+// level 3
+void face_detect_crop(Mat & img, vector<Mat> & detect_faces, vector<int>  labels, vector<int> & d_labels) {
+
+	CascadeClassifier cascade;
+	cascade.load("haarcascade_frontalface_alt.xml");
+	vector<Rect> faces;
+	// resize用
+	int resize_w = 178, resize_h = 218;
+	// 顔周辺を切り出すためのマージン
+	const int margin = 30;
+
+	// run detect
+	cascade.detectMultiScale(img, faces, 1.1, 3, 0, Size(20, 20));
+
+	sort(faces.begin(), faces.end(), fcomp);
+	Mat rgb;
+	cvtColor(img, rgb, COLOR_GRAY2BGR);
+	for (int i = 0; i < faces.size(); i++)
+	{
+		int w = faces[i].width, h = faces[i].height;
+		rectangle(rgb, Rect(faces[i].x, faces[i].y, w, h), Scalar(0, 0, 255), 3, LINE_AA);
+		// crop head regeion
+		    int x = max(0, faces[i].x - margin);
+			int y = max(0, faces[i].y - margin);
+			int dw = min(img.cols - x, faces[i].width + 2 * margin);
+			int dh = min(img.rows - y, faces[i].height + 2 * margin);
+            Rect rect(x, y, dw, dh);
+			// Rect rect(faces[i].x, faces[i].y, w, h);
+
+		Mat roi(img, rect), tmp;
+		roi.copyTo(tmp);
+		resize(tmp, tmp, Size(resize_w, resize_h));
+		imwrite("detect" + to_string(i) +".png", tmp);
+		detect_faces.push_back(tmp);
+		int d_label_index = d_labels_index(faces[i].x, faces[i].y, labels);
+		d_labels.push_back(labels[d_label_index]);
+
+		
+	}
+
+	imshow("detect face", rgb);
+    imwrite("detect.png", rgb);
+	// waitKey(0);
+}
+// 最近傍法
+
+int findNearestNeighbor(const cv::Mat& query, const cv::Mat& database) {
+    int nearestIndex = -1;
+    double minDistance = std::numeric_limits<double>::infinity();
+
+    for (int i = 0; i < database.rows; ++i) {
+        double distance = cv::norm(query, database.row(i), cv::NORM_L2);
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            nearestIndex = i;
+        }
+    }
+
+    return nearestIndex;
+}
+
+// level max
+void test_recognition(vector<Mat> & detect_faces, vector<Mat> & images, vector<int> labels, Mat &averageFace, vector<Mat> & eigenFaces) {
+
+	int M = 40;	// low-rank dimension
+	int N = images.size();
+	Size sz = images[0].size();
+	int correct_counts = 0;
+	int correct_counts2 = 0;
+	// gen dictionary of face database images
+	Mat dict(N, M, CV_64F);
+	// 元画像に関して
+	// ai = (x - μ)piこれを全部の画像で計算．
+	for (int i = 0; i < N; i++) {
+		for (int m = 0; m < M; m++) {
+			dict.at<double>(i, m) = (images[i] - averageFace).dot(eigenFaces[m]);
+		}
+	}
+
+    for (int i = 0; i < detect_faces.size(); i++) {
+
+	Mat target;
+
+	images[labels[i]].convertTo(target, CV_32F);
+	resize(target, target, averageFace.size());
+
+	Mat reconst;
+	imshow("target", target);
+
+	// // reconstruction
+	averageFace.copyTo(reconst);
+	Mat q(1, M, CV_64F);
+	for (int m = 0; m < M; m++) {
+		double a = (target - averageFace).dot(eigenFaces[m]);
+
+		reconst += a * eigenFaces[m];
+		q.at<double>(m) = a;
+	}
+	imshow("reconst", reconst);
+	imwrite("reconst_" + to_string(i) + ".png", reconst*255);
+
+	//*********************************************************
+	// find nearest neighbor from database dict for query q
+	int detect_id = findNearestNeighbor(q, dict);
+	printf("detect_id=%d, correct_id=%d\n", detect_id, labels[i]);
+	if (detect_id == labels[i]){
+		correct_counts += 1;
+	}
+	} 
+	printf("元画像\n");
+	float recognition_rate =  100*static_cast<float>(correct_counts) / detect_faces.size();
+	printf("recognition_rate:%f%%\n", recognition_rate);
+
+
+	// 検出画像の復元
+	for (int i = 0; i < detect_faces.size(); i++){
+	Mat target2;
+	detect_faces[i].convertTo(target2, CV_32F, 1/255.0);
+	resize(target2, target2, averageFace.size());
+
+	Mat reconst2;
+	averageFace.copyTo(reconst2);
+
+	Mat q2(1, M, CV_64F);
+	for (int m = 0; m < M; m++) {
+		double a = (target2 - averageFace).dot(eigenFaces[m]);
+
+		reconst2 += a * eigenFaces[m];
+		q2.at<double>(m) = a;
+	}
+	imshow("reconst2", reconst2);
+	imwrite("reconst2_" + to_string(i) + ".png", reconst2*255);
+
+	//*********************************************************
+	// find nearest neighbor from database dict for query q
+	int detect_id = findNearestNeighbor(q2, dict);
+	printf("detect_id=%d, correct_id=%d\n", detect_id, labels[i]);
+	if (detect_id == labels[i]){
+		correct_counts2 += 1;
+	}
+	}
+	float recognition_rate2 =  100*static_cast<float>(correct_counts2) / detect_faces.size();
+	printf("検出切り出し画像\n");
+	printf("recognition_rate:%f%%\n", recognition_rate2);
+// 	printf("recognition_rate: %f", correct_counts / detect_faces.size());
+}
+
+
 int main() {
 
-	// gen tamplates: change your name with avoiding duplication. 
-	// ex) GouKoutaki -> GouKtaki
-	std::vector<Mat> Ts;
-	gen_template(Ts, "YoshinagAtu");
+	Mat img;
+	// load database face
+	vector<Mat> images;
+	readImages(images);
 
-	// gen input image
-	Mat I;
-	vector<obj_t> objs;
-	gen_input_image(I, Ts, objs);
-	imshow("Input", I);
-    imwrite("in.png", I);
+	// compute eigen faces 固有顔画像 PCAの結果
+	Mat averageFace;
+	vector<Mat> eigenFaces;
+	compute_eigenface(images, averageFace, eigenFaces);
 
-	// run detection
-	vector<obj_t> res1;
-	Mat out1;
-	cvtColor(I, out1, COLOR_GRAY2BGR);
-	detect(I, out1, Ts, res1);
-    imshow("detect", out1);
-    imwrite("detect.png",out1);
-	// Level2 & Level3 : Add Evaluation
+	// gen test input image
+	vector<int> labels;
 
-    //peek値処理を加えた場合
-    vector<obj_t> res2;
-	Mat out2;
-	cvtColor(I, out2, COLOR_GRAY2BGR);
-	peek_detect(I, out2, Ts, res2);
-	// Level2 & Level3 : Add Evaluation
-    int correct_count2, obj_num2;
-    float prec2, total_d2;
-    // 検出率と検出成功の場合の誤差の平均．
-    eval(objs, res2, obj_num2, prec2, total_d2, correct_count2);
-    String eval_text2 = to_string(correct_count2) + "/" + to_string(obj_num2) + "(prec = " + to_string(prec2) + "%), mean_d = " + to_string(total_d2);
-    cv::putText(out2, eval_text2, cv::Point(15,20), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
+	gen_face(images, img, labels, 8746);
 
-    // eval(objs, res2, obj_num, prec, total_d, detect_count);
+    // // imgに対して，顔検出を行う．
+	// face detect(level1) & crop faces : level 3
+	vector<Mat> detect_faces;
+	vector<int> d_labels;
+	face_detect_crop(img, detect_faces, labels, d_labels);
 
-    // String eval_text = to_string(detect_count) + "/" + to_string(obj_num) + "(prec = " to_string(prec) + "%), mean_d = " + to_string(total_d);
-    imshow("detect2", out2);
-    imwrite("peek_detect.png",out2);
+	// // run recognition：level max
+	test_recognition(detect_faces, images, d_labels, averageFace, eigenFaces);
 
-
-    vector<obj_t> res3;
-	Mat out3;
-	cvtColor(I, out3, COLOR_GRAY2BGR);
-	detect_subpix(I, out3, Ts, res3);
-    int correct_count3, obj_num3;
-    float prec3, total_d3;
-    // 検出率と検出成功の場合の誤差の平均．
-    eval(objs, res3, obj_num3, prec3, total_d3, correct_count3);
-    String eval_text3 = to_string(correct_count3) + "/" + to_string(obj_num3) + "(prec = " + to_string(prec3) + "%), mean_d = " + to_string(total_d3);
-    cv::putText(out3, eval_text3, cv::Point(15,20), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
-    imshow("detect3", out3);
-    imwrite("subpix_detect.png",out3);
     waitKey(0);
 
 }
+
+
 
